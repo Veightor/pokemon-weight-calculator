@@ -49,6 +49,54 @@ const CyberScanlines = () => {
   return <div className="cyber-scanline"></div>;
 };
 
+// Back to top button component
+const BackToTopButton = () => {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      // Show button when page is scrolled down 300px
+      setVisible(window.scrollY > 300);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  };
+
+  if (!visible) return null;
+
+  return (
+    <button
+      onClick={scrollToTop}
+      className="fixed bottom-6 right-6 z-50 p-3 bg-cyber-black border-2 border-cyber-blue rounded-full shadow-neon-blue hover:shadow-neon-pink transition-all duration-300 animate-cyber-pulse"
+      aria-label="Back to top"
+    >
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M12 5L5 12M12 5L19 12M12 5V19"
+          stroke="#05d9e8"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
+  );
+};
+
 function App() {
   const [hexagons, setHexagons] = useState<Hexagon[]>([]);
 
@@ -183,6 +231,9 @@ function App() {
           <p className="mt-2">Powered by the PokéAPI & quantum computing</p>
         </footer>
       </div>
+
+      {/* Back to top button */}
+      <BackToTopButton />
     </div>
   );
 }
