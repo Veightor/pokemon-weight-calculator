@@ -1,240 +1,388 @@
-import { useEffect, useState } from "react";
-import PokemonCard from "./components/PokemonCard";
-import "./index.css";
+import { useState, useEffect } from "react";
+import { styled } from "styled-components";
+import "./App.css";
+import { getRandomInt, hexToRgb } from "./utils";
+import AnimalCrackerWeightChart from "./components/AnimalCrackerWeightChart";
+import AnimatedHexagons from "./components/AnimatedHexagons";
+import TireChangerUtilityChart from "./components/TireChangerUtilityChart";
 
-interface HexagonProps {
-  size: number;
-  color: string;
-  animationDelay: number;
-  top: number;
-  left: number;
-}
+const API_URL = "https://pokeapi.co/api/v2/pokemon/";
 
-interface Hexagon extends HexagonProps {
-  id: number;
-}
-
-const FloatingHexagon = ({
-  size,
-  color,
-  animationDelay,
-  top,
-  left,
-}: HexagonProps) => {
-  return (
-    <div
-      className="absolute pointer-events-none"
-      style={{
-        top: `${top}%`,
-        left: `${left}%`,
-        animationDelay: `${animationDelay}s`,
-        opacity: 0.3,
-      }}
-    >
-      <div
-        className={`animate-cyber-float`}
-        style={{
-          width: `${size}px`,
-          height: `${size}px`,
-          background: color,
-          clipPath:
-            "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)",
-        }}
-      />
-    </div>
-  );
-};
-
-const CyberScanlines = () => {
-  return <div className="cyber-scanline"></div>;
-};
-
-// Back to top button component
-const BackToTopButton = () => {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      // Show button when page is scrolled down 300px
-      setVisible(window.scrollY > 300);
+interface Pokemon {
+  name: string;
+  weight: number;
+  height: number;
+  sprites: {
+    front_default: string;
+    other: {
+      "official-artwork": {
+        front_default: string;
+      };
     };
+  };
+  types: Array<{
+    type: {
+      name: string;
+    };
+  }>;
+}
 
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+// Styled components
+const AppContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  position: relative;
+  overflow: hidden;
+  padding: 2rem 1rem;
+  color: #e0e0e0;
+`;
+
+const Header = styled.header`
+  text-align: center;
+  margin-bottom: 2rem;
+  z-index: 2;
+`;
+
+const Title = styled.h1`
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: #0ff;
+  text-shadow: 0 0 10px rgba(0, 255, 255, 0.7), 0 0 20px rgba(0, 255, 255, 0.5);
+
+  @media (max-width: 600px) {
+    font-size: 1.8rem;
+  }
+`;
+
+const Subtitle = styled.p`
+  font-size: 1.2rem;
+  color: #aaa;
+  max-width: 600px;
+  margin: 0 auto;
+`;
+
+const Button = styled.button`
+  background: linear-gradient(45deg, #ff0055, #0099ff);
+  border: none;
+  color: white;
+  padding: 10px 20px;
+  font-size: 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  margin: 1rem 0;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 15px rgba(0, 153, 255, 0.5);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 20px rgba(0, 153, 255, 0.7);
+  }
+
+  &:before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent
+    );
+    transition: all 0.6s ease;
+  }
+
+  &:hover:before {
+    left: 100%;
+  }
+`;
+
+const Card = styled.div`
+  background: rgba(20, 20, 30, 0.8);
+  border-radius: 8px;
+  padding: 2rem;
+  margin: 2rem 0;
+  width: 100%;
+  max-width: 800px;
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+  border: 1px solid rgba(0, 255, 255, 0.1);
+  z-index: 2;
+  position: relative;
+  backdrop-filter: blur(10px);
+`;
+
+const PokemonInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 2rem;
+`;
+
+const PokemonImage = styled.img`
+  width: 180px;
+  height: 180px;
+  filter: drop-shadow(0 0 10px rgba(0, 255, 255, 0.5));
+  margin-bottom: 1rem;
+`;
+
+const PokemonName = styled.h2`
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  text-transform: capitalize;
+  color: #0ff;
+  text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+`;
+
+const TypeBadge = styled.span<{ color: string }>`
+  background: ${(props) => props.color};
+  color: #fff;
+  padding: 5px 15px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  margin: 0 5px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  box-shadow: 0 0 10px ${(props) => {
+    const rgb = hexToRgb(props.color);
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.5)`;
+  }};
+`;
+
+const PokemonTypes = styled.div`
+  display: flex;
+  margin-top: 1rem;
+`;
+
+const PokemonMeasurement = styled.p`
+  font-size: 1.2rem;
+  margin: 0.5rem 0;
+  color: #ddd;
+`;
+
+const LoadingText = styled.p`
+  font-size: 1.2rem;
+  color: #0ff;
+  text-align: center;
+  animation: pulse 1.5s infinite;
+
+  @keyframes pulse {
+    0% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.5;
+    }
+  }
+`;
+
+const ErrorText = styled.p`
+  font-size: 1.2rem;
+  color: #ff3366;
+  text-align: center;
+`;
+
+const Section = styled.section`
+  margin-top: 2rem;
+  width: 100%;
+`;
+
+const SectionTitle = styled.h3`
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+  color: #0ff;
+  text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+  border-bottom: 1px solid rgba(0, 255, 255, 0.3);
+  padding-bottom: 0.5rem;
+`;
+
+const BackToTopButton = styled.button`
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid #0ff;
+  border-radius: 50%;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  color: #0ff;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+  transition: all 0.3s ease;
+  
+  &:hover {
+    background: rgba(0, 255, 255, 0.2);
+    transform: translateY(-3px);
+    box-shadow: 0 0 15px rgba(0, 255, 255, 0.7);
+  }
+`;
+
+// Type colors
+const typeColors: Record<string, string> = {
+  normal: "#A8A878",
+  fire: "#F08030",
+  water: "#6890F0",
+  electric: "#F8D030",
+  grass: "#78C850",
+  ice: "#98D8D8",
+  fighting: "#C03028",
+  poison: "#A040A0",
+  ground: "#E0C068",
+  flying: "#A890F0",
+  psychic: "#F85888",
+  bug: "#A8B820",
+  rock: "#B8A038",
+  ghost: "#705898",
+  dragon: "#7038F8",
+  dark: "#705848",
+  steel: "#B8B8D0",
+  fairy: "#EE99AC",
+};
+
+// Back to Top Button Component
+function BackToTopButton() {
+  const [isVisible, setIsVisible] = useState(false);
+
+  // Show button when page is scrolled down
+  const toggleVisibility = () => {
+    if (window.pageYOffset > 300) {
+      setIsVisible(true);
+    } else {
+      setIsVisible(false);
+    }
+  };
+
+  // Set up scroll event listener
+  useEffect(() => {
+    window.addEventListener('scroll', toggleVisibility);
+    return () => window.removeEventListener('scroll', toggleVisibility);
   }, []);
 
+  // Scroll to top function
   const scrollToTop = () => {
     window.scrollTo({
       top: 0,
-      behavior: "smooth",
+      behavior: 'smooth'
     });
   };
 
-  if (!visible) return null;
-
   return (
-    <button
-      onClick={scrollToTop}
-      className="fixed bottom-6 right-6 z-50 p-3 bg-cyber-black border-2 border-cyber-blue rounded-full shadow-neon-blue hover:shadow-neon-pink transition-all duration-300 animate-cyber-pulse"
-      aria-label="Back to top"
-    >
-      <svg
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M12 5L5 12M12 5L19 12M12 5V19"
-          stroke="#05d9e8"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </button>
+    <>
+      {isVisible && (
+        <BackToTopButton onClick={scrollToTop} className="cyber-button">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 19V5M5 12l7-7 7 7"/>
+          </svg>
+        </BackToTopButton>
+      )}
+    </>
   );
-};
+}
 
 function App() {
-  const [hexagons, setHexagons] = useState<Hexagon[]>([]);
+  const [pokemon, setPokemon] = useState<Pokemon | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const fetchRandomPokemon = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const id = getRandomInt(1, 898); // There are 898 Pokémon in the National Pokédex
+      const response = await fetch(`${API_URL}${id}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch Pokémon data");
+      }
+      const data = await response.json();
+      setPokemon(data);
+    } catch (err) {
+      setError("Error fetching Pokémon. Please try again.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Generate random hexagons for the background
-    const newHexagons: Hexagon[] = [];
-    const hexColors = ["#05d9e8", "#ff2a6d", "#b967ff", "#f9f871"];
-
-    for (let i = 0; i < 20; i++) {
-      newHexagons.push({
-        id: i,
-        size: Math.random() * 30 + 10,
-        color: hexColors[Math.floor(Math.random() * hexColors.length)],
-        animationDelay: Math.random() * 5,
-        top: Math.random() * 100,
-        left: Math.random() * 100,
-      });
-    }
-
-    setHexagons(newHexagons);
+    fetchRandomPokemon();
   }, []);
 
   return (
-    <div className="min-h-screen bg-cyber-black overflow-hidden relative">
-      {/* Animated grid background */}
-      <div className="cyber-grid fixed inset-0"></div>
+    <AppContainer>
+      <AnimatedHexagons />
+      <Header>
+        <Title>Pokémon Weight Calculator</Title>
+        <Subtitle>
+          Discover how many animal crackers your favorite Pokémon weighs and if
+          it would be useful for changing a tire
+        </Subtitle>
+      </Header>
 
-      {/* Floating hexagons */}
-      {hexagons.map((hex) => (
-        <FloatingHexagon
-          key={hex.id}
-          size={hex.size}
-          color={hex.color}
-          animationDelay={hex.animationDelay}
-          top={hex.top}
-          left={hex.left}
-        />
-      ))}
+      <Card>
+        <Button onClick={fetchRandomPokemon}>Generate Random Pokémon</Button>
 
-      {/* Scanlines effect */}
-      <CyberScanlines />
+        {loading && <LoadingText>Loading Pokémon data...</LoadingText>}
+        {error && <ErrorText>{error}</ErrorText>}
 
-      <div className="container mx-auto px-4 py-12 relative z-10">
-        <header className="text-center mb-12">
-          <h1 className="text-6xl font-black mb-4 text-cyber-blue">
-            <span className="cyber-glitch-text" data-text="POKÉ">
-              POKÉ
-            </span>
-            <span className="text-cyber-pink">CYBER</span>
-            <span className="cyber-glitch-text" data-text="CALC">
-              CALC
-            </span>
-          </h1>
-          <div className="max-w-2xl mx-auto bg-cyber-black/50 backdrop-blur-sm p-4 rounded-md">
-            <p className="text-xl text-cyber-yellow font-medium">
-              DISCOVER YOUR POKÉMON'S WEIGHT IN ANIMAL CRACKERS AND ASSESS ITS
-              TIRE-CHANGING CAPABILITIES
-            </p>
-          </div>
-        </header>
+        {pokemon && !loading && (
+          <>
+            <PokemonInfo>
+              <PokemonImage
+                src={
+                  pokemon.sprites.other["official-artwork"].front_default ||
+                  pokemon.sprites.front_default
+                }
+                alt={pokemon.name}
+              />
+              <PokemonName>{pokemon.name}</PokemonName>
+              <PokemonTypes>
+                {pokemon.types.map((type) => (
+                  <TypeBadge
+                    key={type.type.name}
+                    color={typeColors[type.type.name] || "#777"}
+                  >
+                    {type.type.name}
+                  </TypeBadge>
+                ))}
+              </PokemonTypes>
+              <PokemonMeasurement>
+                Height: {pokemon.height / 10} m
+              </PokemonMeasurement>
+              <PokemonMeasurement>
+                Weight: {pokemon.weight / 10} kg
+              </PokemonMeasurement>
+            </PokemonInfo>
 
-        <div className="flex flex-col lg:flex-row gap-8 items-start justify-center">
-          <div className="lg:w-7/12">
-            <PokemonCard />
-          </div>
+            <Section>
+              <SectionTitle>Animal Cracker Equivalence</SectionTitle>
+              <AnimalCrackerWeightChart weight={pokemon.weight / 10} />
+            </Section>
 
-          <div className="lg:w-5/12 cyber-card p-8 animate-cyber-pulse">
-            <h2 className="text-3xl font-bold mb-6 text-cyber-green">
-              User Terminal
-            </h2>
-
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-xl font-bold text-cyber-blue mb-2">
-                  How It Works
-                </h3>
-                <p className="text-cyber-yellow">
-                  Our advanced quantum algorithm calculates the precise animal
-                  cracker equivalent of each Pokémon's weight. Click the button
-                  to generate a new Pokémon and discover its hidden metrics.
-                </p>
-              </div>
-
-              <div>
-                <h3 className="text-xl font-bold text-cyber-blue mb-2">
-                  Tire Change Analysis
-                </h3>
-                <p className="text-cyber-yellow">
-                  Our neural network evaluates each Pokémon's physical
-                  capabilities, elemental properties, and temperament to
-                  determine their effectiveness as roadside assistance
-                  companions.
-                </p>
-              </div>
-
-              <div className="mt-8">
-                <div className="flex flex-col md:flex-row gap-4">
-                  <div className="bg-cyber-black p-3 border border-cyber-pink rounded-md flex-1">
-                    <h4 className="text-lg font-semibold text-cyber-pink mb-1">
-                      System Status
-                    </h4>
-                    <p className="text-white font-mono">CONNECTION: SECURE</p>
-                    <p className="text-white font-mono">API: OPERATIONAL</p>
-                    <p className="text-white font-mono">
-                      QUANTUM-CRACKERS: CALIBRATED
-                    </p>
-                  </div>
-
-                  <div className="bg-cyber-black p-3 border border-cyber-blue rounded-md flex-1">
-                    <h4 className="text-lg font-semibold text-cyber-blue mb-1">
-                      Data Registry
-                    </h4>
-                    <p className="text-white font-mono">POKÉMON ENTRIES: 898</p>
-                    <p className="text-white font-mono">
-                      CRACKERS CALIBRATED: YES
-                    </p>
-                    <p className="text-white font-mono">
-                      TIRE-CHANGE MODELS: ACTIVE
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <footer className="mt-16 text-center text-gray-400 text-sm">
-          <p>
-            Engineered with <span className="text-cyber-pink">❤</span> for
-            Pokémon trainers on the go
-          </p>
-          <p className="mt-2">Powered by the PokéAPI & quantum computing</p>
-        </footer>
-      </div>
-
-      {/* Back to top button */}
+            <Section>
+              <SectionTitle>Tire Changer Utility Assessment</SectionTitle>
+              <TireChangerUtilityChart weight={pokemon.weight / 10} />
+            </Section>
+          </>
+        )}
+      </Card>
       <BackToTopButton />
-    </div>
+    </AppContainer>
   );
 }
 
